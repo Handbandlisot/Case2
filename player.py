@@ -25,8 +25,11 @@ class Player:
         self.max_energy = 100
         self.log = []          # список строк — журнал событий/действий
         self.alive_in_tournament = True
+        self.school = None     # выбранная школа стихии (dict из game_data.SCHOOLS)
         self.battle_hp = 0
         self.battle_max_hp = 0
+        self.battle_energy = 0
+        self.battle_max_energy = 0
 
     def change_stat(self, stat: str, amount: int):
         self.stats[stat] = max(0, self.stats[stat] + amount)
@@ -44,3 +47,5 @@ class Player:
     def init_battle_stats(self):
         self.battle_max_hp = 50 + self.stats["athletics"] * 3
         self.battle_hp = self.battle_max_hp
+        self.battle_max_energy = 50 + self.stats["concentration"] * 2
+        self.battle_energy = self.battle_max_energy // 2

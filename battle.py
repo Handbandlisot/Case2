@@ -1,19 +1,24 @@
-"""Финальная мини-игра турнира: бои 1x1 в формате атака/защита,
-визуализированные как анимированная схватка двух человечков.
-Логика урона/шансов не отличается от предыдущей версии — изменена только визуализация.
+"""Финальная мини-игра турнира: бои 1x1 — атака/защита + уникальная способность школы,
+обе тратящие боевую энергию. Визуализация — анимированная схватка двух человечков,
+стилизованных под стихию (цвет + декоративные элементы).
 Полуфинал (2 боя из 4 игроков) -> финал (1 бой) -> чемпион.
 """
 import math
 import random
 import pygame
 
-from ui import (Button, draw_stat_bar, draw_stick_figure, WIDTH, HEIGHT,
-                 BG, PANEL, PANEL_LIGHT, TEXT, TEXT_DIM, ACCENT, GOOD, BAD, BORDER)
+from ui import (Button, draw_stat_bar, draw_stick_figure, draw_school_flourish, figure_offset,
+                 WIDTH, HEIGHT, BG, PANEL, PANEL_LIGHT, TEXT, TEXT_DIM, ACCENT, GOOD, BAD, BORDER)
 from game_data import success_chance
 
 GROUND_Y = 430
 POS_A = (240, GROUND_Y)
 POS_B = (720, GROUND_Y)
+
+BATTLE_ENERGY_REGEN = 20   # восстановление боевой энергии в начале каждого хода бойца
+
+BTN_W, BTN_H, BTN_GAP = 190, 56, 16
+BTN_Y = 560
 
 
 def ease_out(t):
@@ -35,6 +40,8 @@ class BattleState:
 
         self.a_defending = False
         self.b_defending = False
+        self.a_reflect = 0
+        self.b_reflect = 0
         self.log = [f"⚔️ {title}: {player_a.name} против {player_b.name}!"]
         self.finished = False
         self.winner = None
@@ -51,6 +58,7 @@ class BattleState:
         self.buttons = []
         self._build_action_buttons()
 
+    # ---------- вспомогательное ----------
     def fighters(self):
         return [self.a, self.b]
 
@@ -70,90 +78,169 @@ class BattleState:
         px, py = self._pos(player)
         self.popups.append({"text": text, "x": px, "y": py - 110, "t": 0.0, "color": color})
 
+    def _push_log(self, text):
+        self.log.append(text)
+        self.log = self.log[-6:]
+
     def _build_action_buttons(self):
-        self.buttons = [
-            Button((WIDTH // 2 - 220, 560, 200, 56), "⚔️ Атаковать", self.do_attack),
-            Button((WIDTH // 2 + 20, 560, 200, 56), "🛡️ Защититься", self.do_defend),
-        ]
+        attacker = self.current()
+        specs = [("⚔️ Атака", self.do_attack, "", True)]
+        specs.append(("🛡️ Защита", self.do_defend, "", True))
+        ability = attacker.school["ability"] if attacker.school else None
+        if ability:
+            can = attacker.battle_energy >= ability["cost"]
+            icon = attacker.school["icon"]
+            specs.append((f"{icon} {ability['name']}", self.do_ability, f"-{ability['cost']} эн.", can))
+
+        total_w = len(specs) * BTN_W + (len(specs) - 1) * BTN_GAP
+        start_x = WIDTH // 2 - total_w // 2
+        btns = []
+        for i, (label, cb, sub, enabled) in enumerate(specs):
+            x = start_x + i * (BTN_W + BTN_GAP)
+            btns.append(Button((x, BTN_Y, BTN_W, BTN_H), label, cb, subtitle=sub, enabled=enabled))
+        self.buttons = btns
 
     def _build_continue_button(self):
-        self.buttons = [Button((WIDTH // 2 - 130, 560, 260, 56), "Продолжить", self._finish)]
+        self.buttons = [Button((WIDTH // 2 - 130, BTN_Y, 260, 56), "Продолжить", self._finish)]
 
+    # ---------- действия игрока ----------
     def do_attack(self):
-        if self.anim_phase is not None or self.finished:
-            return
-        attacker, defender = self.current(), self.opponent()
-        chance = success_chance(attacker.stats["luck"])
-        crit = random.randint(1, 100) <= chance
-        dmg = 8 + attacker.stats["athletics"] // 2 + random.randint(0, 6)
-        if crit:
-            dmg = int(dmg * 1.6)
-        defending = self.b_defending if defender is self.b else self.a_defending
-        if defending:
-            dmg = dmg // 2
-
-        self._pending = {"attacker": attacker, "defender": defender, "dmg": dmg,
-                          "crit": crit, "blocked": defending}
-        self.buttons = []
-        self.anim_phase = "lunge_out"
-        self.anim_timer = 0.0
+        self._start_attack(power_mult=1.0, energy_cost=0, ignore_block=False, ability_name=None)
 
     def do_defend(self):
         if self.anim_phase is not None or self.finished:
             return
         attacker = self.current()
-        if attacker is self.a:
-            self.a_defending = True
-        else:
-            self.b_defending = True
-
         heal_chance = success_chance(attacker.stats["guile"]) // 3
-        healed = 0
-        if random.randint(1, 100) <= heal_chance:
-            healed = 6
-            attacker.battle_hp = min(attacker.battle_max_hp, attacker.battle_hp + healed)
-            self._add_popup(attacker, f"+{healed}", GOOD)
+        healed = 6 if random.randint(1, 100) <= heal_chance else 0
+        self._start_support(heal=healed, shield=True, reflect=0, energy_cost=0, ability_name=None)
 
-        heal_txt = f", восстановлено {healed} HP" if healed else ""
-        self._push_log(f"{attacker.name} занимает защитную стойку{heal_txt}")
-        self._vis(attacker)["shield"] = True
+    def do_ability(self):
+        if self.anim_phase is not None or self.finished:
+            return
+        attacker = self.current()
+        ability = attacker.school["ability"] if attacker.school else None
+        if not ability or attacker.battle_energy < ability["cost"]:
+            return
+        effect = ability["effect"]
+        if effect == "burst_damage":
+            self._start_attack(power_mult=ability.get("power_mult", 1.5), energy_cost=ability["cost"],
+                                ignore_block=False, ability_name=ability["name"])
+        elif effect == "pierce_strike":
+            self._start_attack(power_mult=ability.get("power_mult", 1.3), energy_cost=ability["cost"],
+                                ignore_block=True, ability_name=ability["name"])
+        elif effect == "heal":
+            healed = min(ability["heal_amount"], attacker.battle_max_hp - attacker.battle_hp)
+            self._start_support(heal=healed, shield=False, reflect=0, energy_cost=ability["cost"],
+                                 ability_name=ability["name"])
+        elif effect == "fortify":
+            self._start_support(heal=0, shield=True, reflect=ability.get("reflect", 0), energy_cost=ability["cost"],
+                                 ability_name=ability["name"])
+
+    def _start_attack(self, power_mult, energy_cost, ignore_block, ability_name):
+        if self.anim_phase is not None or self.finished:
+            return
+        attacker, defender = self.current(), self.opponent()
+        if energy_cost:
+            attacker.battle_energy -= energy_cost
+
+        chance = success_chance(attacker.stats["luck"])
+        crit = random.randint(1, 100) <= chance
+        dmg = int((8 + attacker.stats["athletics"] // 2 + random.randint(0, 6)) * power_mult)
+        if crit:
+            dmg = int(dmg * 1.6)
+
+        defending = self.b_defending if defender is self.b else self.a_defending
+        blocked = defending and not ignore_block
+        if blocked:
+            dmg = dmg // 2
+        reflect_amt = (self.b_reflect if defender is self.b else self.a_reflect) if defending else 0
+
+        self._pending = {"attacker": attacker, "defender": defender, "dmg": dmg, "crit": crit,
+                          "blocked": blocked, "reflect": reflect_amt, "ability_name": ability_name}
+        self.buttons = []
+        self.anim_phase = "lunge_out"
+        self.anim_timer = 0.0
+
+    def _start_support(self, heal, shield, reflect, energy_cost, ability_name):
+        if self.anim_phase is not None or self.finished:
+            return
+        attacker = self.current()
+        if energy_cost:
+            attacker.battle_energy -= energy_cost
+        if heal > 0:
+            attacker.battle_hp = min(attacker.battle_max_hp, attacker.battle_hp + heal)
+            self._add_popup(attacker, f"+{heal}", GOOD)
+        if shield:
+            if attacker is self.a:
+                self.a_defending = True
+                self.a_reflect = reflect
+            else:
+                self.b_defending = True
+                self.b_reflect = reflect
+            self._vis(attacker)["shield"] = True
+
+        heal_txt = f", +{heal} HP" if heal > 0 else ""
+        verb = f"использует «{ability_name}»" if ability_name else "занимает защитную стойку"
+        self._push_log(f"{attacker.name} {verb}{heal_txt}")
 
         self.buttons = []
         self.anim_phase = "defend_pose"
         self.anim_timer = 0.0
 
-    def _push_log(self, text):
-        self.log.append(text)
-        self.log = self.log[-6:]
-
+    # ---------- разрешение анимации ----------
     def _apply_impact(self):
         p = self._pending
-        attacker, defender, dmg, crit, blocked = p["attacker"], p["defender"], p["dmg"], p["crit"], p["blocked"]
+        attacker, defender = p["attacker"], p["defender"]
+        dmg, crit, blocked, reflect_amt, ability_name = p["dmg"], p["crit"], p["blocked"], p["reflect"], p["ability_name"]
 
         defender.battle_hp = max(0, defender.battle_hp - dmg)
         self._vis(defender)["hit"] = 1.0
-        self._add_popup(defender, f"-{dmg}", BAD if not crit else ACCENT)
+        self._add_popup(defender, f"-{dmg}", ACCENT if crit else BAD)
 
         if defender is self.b:
             self.b_defending = False
+            used_reflect = self.b_reflect
+            self.b_reflect = 0
         else:
             self.a_defending = False
+            used_reflect = self.a_reflect
+            self.a_reflect = 0
         self._vis(defender)["shield"] = False
 
         crit_txt = " — КРИТИЧЕСКИЙ УДАР!" if crit else ""
         block_txt = " (частично заблокировано)" if blocked else ""
-        self._push_log(f"{attacker.name} атакует {defender.name}: {dmg} урона{crit_txt}{block_txt}")
+        verb = f"использует «{ability_name}» против" if ability_name else "атакует"
+        self._push_log(f"{attacker.name} {verb} {defender.name}: {dmg} урона{crit_txt}{block_txt}")
+
+        reflect_applied = used_reflect if blocked else 0
+        if reflect_applied:
+            attacker.battle_hp = max(0, attacker.battle_hp - reflect_applied)
+            self._add_popup(attacker, f"-{reflect_applied}", BAD)
+            self._push_log(f"Каменная броня {defender.name} отражает {reflect_applied} урона!")
 
         if defender.battle_hp <= 0:
             self.finished = True
             self.winner = attacker
             self._vis(defender)["fallen"] = True
             self._push_log(f"🏆 {self.winner.name} побеждает в поединке!")
+        elif attacker.battle_hp <= 0:
+            self.finished = True
+            self.winner = defender
+            self._vis(attacker)["fallen"] = True
+            self._push_log(f"🏆 {self.winner.name} побеждает — соперник погиб от отдачи!")
 
     def _end_turn_switch(self):
         self.attacker_idx = 1 - self.attacker_idx
+        new_attacker = self.current()
+        new_attacker.battle_energy = min(new_attacker.battle_max_energy,
+                                          new_attacker.battle_energy + BATTLE_ENERGY_REGEN)
         self._build_action_buttons()
 
+    def _finish(self):
+        self.on_finish(self.winner)
+
+    # ---------- игровой цикл ----------
     def handle_event(self, event):
         for btn in self.buttons:
             btn.handle_event(event)
@@ -179,12 +266,8 @@ class BattleState:
             defender = self._pending["defender"]
             self._vis(defender)["hit"] = max(0.0, 1.0 - self.anim_timer / 0.3)
             if self.anim_timer >= 0.3:
-                if self.finished:
-                    self.anim_phase = "victory"
-                    self.anim_timer = 0.0
-                else:
-                    self.anim_phase = "lunge_back"
-                    self.anim_timer = 0.0
+                self.anim_phase = "victory" if self.finished else "lunge_back"
+                self.anim_timer = 0.0
 
         elif self.anim_phase == "lunge_back":
             self.anim_timer += dt
@@ -207,9 +290,7 @@ class BattleState:
                 self.anim_phase = None
                 self._build_continue_button()
 
-    def _finish(self):
-        self.on_finish(self.winner)
-
+    # ---------- отрисовка ----------
     def draw(self, surf, font_big, font, font_small):
         surf.fill(BG)
         title = font.render(self.title, True, ACCENT)
@@ -223,10 +304,16 @@ class BattleState:
             bob = math.sin(self.bob_phase + (0 if player is self.a else 1.6)) * 3
             is_winner_pose = self.finished and player is self.winner and self.anim_phase == "victory"
             pose = "attack" if vis["lunge"] > 0.05 else ("victory" if is_winner_pose else "idle")
-            draw_stick_figure(
-                surf, pos[0], pos[1] + bob, facing=facing, color=TEXT, pose=pose,
-                lunge=vis["lunge"], hit=vis["hit"], shield=vis["shield"], fallen=vis["fallen"],
-            )
+
+            color = player.school["color"] if player.school else TEXT
+            fy = pos[1] + bob
+            draw_stick_figure(surf, pos[0], fy, facing=facing, color=color, pose=pose,
+                               lunge=vis["lunge"], hit=vis["hit"], shield=vis["shield"], fallen=vis["fallen"])
+
+            if player.school and not vis["fallen"]:
+                cx = pos[0] + figure_offset(facing, vis["lunge"], vis["hit"])
+                head_y = fy - 100
+                draw_school_flourish(surf, cx, head_y, fy, player.school["id"], color, self.bob_phase)
 
         if not self.finished and self.anim_phase is None:
             turn_txt = font_small.render(f"Ход: {self.current().name}", True, TEXT)
@@ -238,11 +325,11 @@ class BattleState:
             r = font.render(pop["text"], True, col)
             surf.blit(r, r.get_rect(center=(pop["x"], pop["y"])))
 
-        y = 320
+        y = 300
         for line in self.log:
             r = font_small.render(line, True, TEXT_DIM)
             surf.blit(r, r.get_rect(center=(WIDTH // 2, y)))
-            y += 24
+            y += 22
 
         for btn in self.buttons:
             btn.draw(surf, font, font_small)
@@ -251,14 +338,21 @@ class BattleState:
         x, y = pos
         w = 220
         box_x = x - w // 2
-        box_y = y - 200
-        name = font_small.render(fighter.name, True, TEXT)
+        box_y = y - 210
+        icon = f"{fighter.school['icon']} " if fighter.school else ""
+        name = font_small.render(f"{icon}{fighter.name}", True, TEXT)
         surf.blit(name, name.get_rect(center=(x, box_y)))
+
         hp_txt = font_small.render(f"{fighter.battle_hp}/{fighter.battle_max_hp} HP", True, TEXT_DIM)
         surf.blit(hp_txt, hp_txt.get_rect(center=(x, box_y + 18)))
         ratio = fighter.battle_hp / fighter.battle_max_hp if fighter.battle_max_hp else 0
         color = GOOD if ratio > 0.4 else BAD
-        draw_stat_bar(surf, box_x, box_y + 32, w, 12, ratio, color)
+        draw_stat_bar(surf, box_x, box_y + 32, w, 11, ratio, color)
+
+        en_ratio = fighter.battle_energy / fighter.battle_max_energy if fighter.battle_max_energy else 0
+        draw_stat_bar(surf, box_x, box_y + 47, w, 8, en_ratio, (90, 140, 220))
+        en_txt = font_small.render(f"⚡ {fighter.battle_energy}/{fighter.battle_max_energy}", True, TEXT_DIM)
+        surf.blit(en_txt, en_txt.get_rect(center=(x, box_y + 62)))
 
 
 class TournamentState:

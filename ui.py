@@ -1,4 +1,5 @@
 """Общие UI-утилиты: кнопки, отрисовка текста, панели статов."""
+import math
 import pygame
 
 WIDTH, HEIGHT = 960, 640
@@ -92,8 +93,7 @@ def draw_stick_figure(surf, x, y, facing=1, color=TEXT, pose="idle",
     shield: рисовать щит перед фигурой.
     fallen: фигура лежит (повержена).
     """
-    offset = facing * lunge * 42 - facing * hit * 16
-    cx = x + offset
+    cx = x + figure_offset(facing, lunge, hit)
 
     draw_col = color
     if hit > 0:
@@ -133,6 +133,36 @@ def draw_stick_figure(surf, x, y, facing=1, color=TEXT, pose="idle",
     if shield:
         shield_x = cx + facing * 22
         pygame.draw.circle(surf, ACCENT, (int(shield_x), int(shoulder_y + 6)), 17, width=4)
+
+
+def figure_offset(facing, lunge, hit):
+    """Смещение фигуры вдоль направления взгляда — используется и для тела, и для ауры стихии."""
+    return facing * lunge * 42 - facing * hit * 16
+
+
+def draw_school_flourish(surf, cx, head_y, feet_y, school_id, color, phase=0.0):
+    """Небольшие декоративные элементы стихии вокруг фигуры: огонь/вода/земля/воздух."""
+    if school_id == "fire":
+        for i, dx in enumerate((-9, 0, 9)):
+            fy = head_y - 20 - 3 * math.sin(phase * 3 + i)
+            pygame.draw.polygon(surf, color, [
+                (cx + dx, fy - 10), (cx + dx - 6, fy + 8), (cx + dx + 6, fy + 8),
+            ])
+    elif school_id == "water":
+        for i, dx in enumerate((-18, 18)):
+            dy = 5 * math.sin(phase * 2 + i * 2)
+            pygame.draw.circle(surf, color, (int(cx + dx), int(head_y - 6 + dy)), 4)
+    elif school_id == "earth":
+        for dx in (-20, -4, 14):
+            pygame.draw.rect(surf, color, (cx + dx, feet_y - 6, 9, 7), border_radius=2)
+    elif school_id == "air":
+        radius = 28
+        mid_y = (head_y + feet_y) / 2
+        for i in range(3):
+            ang = phase * 2 + i * 2.1
+            px = cx + math.cos(ang) * radius
+            py = mid_y + math.sin(ang) * radius * 0.5
+            pygame.draw.circle(surf, color, (int(px), int(py)), 3)
 
 
 def draw_player_panel(surf, player, x, y, w, font, font_small, highlight=False):

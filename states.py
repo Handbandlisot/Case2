@@ -1,13 +1,16 @@
-"""Экраны подготовки к турниру: меню -> 10 дней (событие + действие на игрока) -> результаты."""
+"""Экраны подготовки к турниру: меню -> выбор школ -> 10 дней (события + несколько
+действий за ход) -> результаты."""
 import random
 import pygame
 
 from ui import (Button, draw_text_block, draw_player_panel, WIDTH, HEIGHT,
                  BG, PANEL, PANEL_LIGHT, TEXT, TEXT_DIM, ACCENT, GOOD, BAD, BORDER)
 from player import Player, STAT_NAMES
-from game_data import EVENTS, TRAININGS, SABOTAGE_ACTIONS, success_chance
+from game_data import EVENTS, TRAININGS, SABOTAGE_ACTIONS, SCHOOLS, success_chance
 
 TOTAL_DAYS = 1
+ENERGY_REGEN_PER_TURN = 50   # восстановление энергии подготовки в начале хода игрока
+ADVANCE_BUTTON_Y = 560       # общий уровень для кнопок "Продолжить"/"Далее"
 
 
 def apply_effect(player: Player, effect: dict):
@@ -33,7 +36,7 @@ class MenuState:
     def start(self):
         names = ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"]
         self.game.players = [Player(n) for n in names]
-        self.game.set_state(PreparationState(self.game))
+        self.game.set_state(SchoolSelectState(self.game))
 
     def handle_event(self, event):
         for b in self.buttons:
@@ -46,8 +49,8 @@ class MenuState:
         surf.fill(BG)
         title = font_big.render("Турнир школ стихий", True, ACCENT)
         surf.blit(title, title.get_rect(center=(WIDTH // 2, 160)))
-        sub = ("4 игрока по очереди готовятся 10 дней: пассивные события и активные\n"
-               "действия (тренировки/саботаж), затем турнирные бои 1×1.")
+        sub = ("4 игрока по очереди готовятся 10 дней: пассивные события и несколько\n"
+               "активных действий за ход, затем турнирные бои 1×1 со способностями стихий.")
         y = 240
         for line in sub.split("\n"):
             r = font.render(line, True, TEXT_DIM)
@@ -57,8 +60,65 @@ class MenuState:
             b.draw(surf, font, font_small)
 
 
+class SchoolSelectState:
+    """Каждый из 4 игроков по очереди выбирает уникальную школу стихии."""
+
+    def __init__(self, game):
+        self.game = game
+        self.index = 0
+        self.available = list(SCHOOLS)
+        self._build_buttons()
+
+    def _bonus_text(self, school):
+        stat, val = next(iter(school["stat_bonus"].items()))
+        return f"+{val} {STAT_NAMES[stat]} • {school['ability']['name']}"
+
+    def _build_buttons(self):
+        btns = []
+        y = 230
+        for school in self.available:
+            btns.append(Button(
+                (WIDTH // 2 - 220, y, 440, 64),
+                f"{school['icon']} {school['name']}",
+                (lambda s=school: self._pick(s)),
+                subtitle=self._bonus_text(school),
+            ))
+            y += 78
+        self.buttons = btns
+
+    def _pick(self, school):
+        player = self.game.players[self.index]
+        player.school = school
+        for stat, val in school["stat_bonus"].items():
+            player.change_stat(stat, val)
+        self.available = [s for s in self.available if s is not school]
+        self.index += 1
+        if self.index >= len(self.game.players):
+            self.game.set_state(PreparationState(self.game))
+        else:
+            self._build_buttons()
+
+    def handle_event(self, event):
+        for b in self.buttons:
+            b.handle_event(event)
+
+    def update(self, dt):
+        pass
+
+    def draw(self, surf, font_big, font, font_small):
+        surf.fill(BG)
+        title = font_big.render("Выбор школы стихии", True, ACCENT)
+        surf.blit(title, title.get_rect(center=(WIDTH // 2, 90)))
+        name = font.render(f"{self.game.players[self.index].name}, выберите школу:", True, TEXT)
+        surf.blit(name, name.get_rect(center=(WIDTH // 2, 150)))
+        for b in self.buttons:
+            b.draw(surf, font, font_small)
+
+
 class PreparationState:
-    """Управляет циклом: pass_device -> event -> action -> (target) -> result -> следующий игрок/день."""
+    """Цикл: pass_device -> event -> action (несколько действий подряд, пока хватает
+    энергии и желания) -> следующий игрок/день. В начале каждого хода игрока энергия
+    восстанавливается на ENERGY_REGEN_PER_TURN."""
 
     def __init__(self, game):
         self.game = game
@@ -66,8 +126,9 @@ class PreparationState:
         self.turn_index = 0
         self.phase = "pass_device"
         self.event_result_text = ""
-        self.action_result_text = ""
+        self.last_action_text = ""
         self.pending_sabotage = None
+        self.current_event = None
         self.buttons = []
         self._build_pass_device()
 
@@ -79,10 +140,17 @@ class PreparationState:
     def _roll(self, stat_value):
         return random.randint(1, 100) <= success_chance(stat_value)
 
+    def _has_target(self, player):
+        return any(p is not player for p in self.game.players)
+
     # ---------- phase builders ----------
     def _build_pass_device(self):
         self.phase = "pass_device"
-        self.buttons = [Button((WIDTH // 2 - 130, 480, 260, 56), "Продолжить", self._enter_event)]
+        self.last_action_text = ""
+        # ход игрока начинается — восстанавливаем часть энергии
+        self.current_player.change_energy(ENERGY_REGEN_PER_TURN)
+        self.buttons = [Button((WIDTH // 2 - 130, ADVANCE_BUTTON_Y, 260, 56),
+                                "Продолжить", self._enter_event)]
 
     def _enter_event(self):
         player = self.current_player
@@ -98,13 +166,14 @@ class PreparationState:
         applied = apply_effect(player, effect)
         self.event_result_text = f"{headline} ({applied})"
         self.phase = "event"
-        self.buttons = [Button((WIDTH // 2 - 130, 560, 260, 56), "Далее: действие", self._enter_action)]
+        self.buttons = [Button((WIDTH // 2 - 130, ADVANCE_BUTTON_Y, 260, 56),
+                                "Далее: действия", self._enter_action)]
 
     def _enter_action(self):
         self.phase = "action"
         player = self.current_player
         btns = []
-        x, y, w, h, gap = 60, 220, 400, 46, 10
+        x, y, w, h, gap = 60, 210, 400, 46, 10
         row = 0
         for t in TRAININGS:
             can = player.energy >= t["cost"]
@@ -126,11 +195,8 @@ class PreparationState:
                 subtitle="Хитрость / саботаж", enabled=can,
             ))
             row2 += 1
-        btns.append(Button((x2, y + row2 * (h + gap), w, h), "Пропустить ход", self._resolve_no_action))
+        btns.append(Button((x2, y + row2 * (h + gap), w, h), "Закончить ход ➜", self._advance_turn))
         self.buttons = btns
-
-    def _has_target(self, player):
-        return any(p is not player for p in self.game.players)
 
     def _do_training(self, t):
         player = self.current_player
@@ -139,8 +205,8 @@ class PreparationState:
         effect = t["crit_effect"] if good else t["normal_effect"]
         applied = apply_effect(player, effect)
         headline = "✨ Отличная тренировка!" if good else "Тренировка прошла в обычном темпе."
-        self.action_result_text = f"{headline} ({applied})"
-        self._go_action_result()
+        self.last_action_text = f"{headline} ({applied})"
+        self._enter_action()
 
     def _start_target_select(self, action):
         self.pending_sabotage = action
@@ -153,6 +219,7 @@ class PreparationState:
                 continue
             btns.append(Button((WIDTH // 2 - 150, y, 300, 50), p.name, (lambda pp=p: self._do_sabotage(pp))))
             y += 60
+        btns.append(Button((WIDTH // 2 - 150, y + 10, 300, 44), "Отмена", self._enter_action))
         self.buttons = btns
 
     def _do_sabotage(self, target):
@@ -162,24 +229,16 @@ class PreparationState:
         good = self._roll(player.stats[action["stat"]])
         if good:
             applied = apply_effect(target, action["target_effect_crit"])
-            self.action_result_text = f"✨ Саботаж удался в полной мере! {target.name}: {applied}"
+            self.last_action_text = f"✨ Саботаж удался в полной мере! {target.name}: {applied}"
         else:
             roll_partial = random.random() < 0.5
             if roll_partial:
                 applied = apply_effect(target, action["target_effect_normal"])
-                self.action_result_text = f"Саботаж частично удался. {target.name}: {applied}"
+                self.last_action_text = f"Саботаж частично удался. {target.name}: {applied}"
             else:
                 applied = apply_effect(player, action["self_fail_effect"])
-                self.action_result_text = f"⚠️ Саботаж провалился и раскрыт! Вы: {applied}"
-        self._go_action_result()
-
-    def _resolve_no_action(self):
-        self.action_result_text = "Игрок решил отдохнуть и не тратить энергию."
-        self._go_action_result()
-
-    def _go_action_result(self):
-        self.phase = "action_result"
-        self.buttons = [Button((WIDTH // 2 - 130, 560, 260, 56), "Далее", self._advance_turn)]
+                self.last_action_text = f"⚠️ Саботаж провалился и раскрыт! Вы: {applied}"
+        self._enter_action()
 
     def _advance_turn(self):
         self.turn_index += 1
@@ -206,11 +265,15 @@ class PreparationState:
         surf.blit(font_small.render(header, True, TEXT_DIM), (20, 16))
 
         if self.phase == "pass_device":
-            msg = f"Передайте устройство игроку:"
+            msg = "Передайте устройство игроку:"
             r = font.render(msg, True, TEXT_DIM)
             surf.blit(r, r.get_rect(center=(WIDTH // 2, 240)))
             name = font_big.render(self.current_player.name, True, ACCENT)
             surf.blit(name, name.get_rect(center=(WIDTH // 2, 300)))
+            if self.current_player.school:
+                school = font.render(f"{self.current_player.school['icon']} {self.current_player.school['name']}",
+                                      True, TEXT_DIM)
+                surf.blit(school, school.get_rect(center=(WIDTH // 2, 340)))
 
         elif self.phase == "event":
             ev = self.current_event
@@ -221,16 +284,15 @@ class PreparationState:
             draw_text_block(surf, self.event_result_text, font, (WIDTH // 2 - 300, 320), 600, color=ACCENT)
 
         elif self.phase == "action":
-            name = font.render(f"{self.current_player.name} — выберите действие", True, TEXT)
-            surf.blit(name, (60, 170))
+            name = font.render(f"{self.current_player.name} — действия этого хода", True, TEXT)
+            surf.blit(name, (60, 160))
             draw_player_panel(surf, self.current_player, 60, 40, 840, font_small, font_small)
+            if self.last_action_text:
+                draw_text_block(surf, self.last_action_text, font_small, (60, 196), 840, color=ACCENT)
 
         elif self.phase == "target":
             title = font.render(f"{self.pending_sabotage['desc']} — выберите цель", True, TEXT)
             surf.blit(title, title.get_rect(center=(WIDTH // 2, 190)))
-
-        elif self.phase == "action_result":
-            draw_text_block(surf, self.action_result_text, font, (WIDTH // 2 - 300, 300), 600, color=ACCENT)
 
         for b in self.buttons:
             b.draw(surf, font, font_small)
@@ -240,7 +302,7 @@ class ResultsState:
     def __init__(self, game, champion=None):
         self.game = game
         self.champion = champion
-        self.buttons = [Button((WIDTH // 2 - 130, 560, 260, 56), "Новая игра", self.restart)]
+        self.buttons = [Button((WIDTH // 2 - 130, ADVANCE_BUTTON_Y, 260, 56), "Новая игра", self.restart)]
 
     def restart(self):
         self.game.set_state(MenuState(self.game))
@@ -264,9 +326,10 @@ class ResultsState:
         ranked = sorted(self.game.players, key=lambda p: p.power_score(), reverse=True)
         y = 210
         for i, p in enumerate(ranked, start=1):
-            line = f"{i}. {p.name} — суммарная мощь: {p.power_score()} (энергия: {p.energy})"
+            school_name = p.school["name"] if p.school else "—"
+            line = f"{i}. {p.name} ({school_name}) — мощь: {p.power_score()} (энергия: {p.energy})"
             r = font_small.render(line, True, TEXT)
-            surf.blit(r, (WIDTH // 2 - 260, y))
+            surf.blit(r, (WIDTH // 2 - 320, y))
             y += 30
 
         for b in self.buttons:

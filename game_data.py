@@ -66,3 +66,40 @@ SABOTAGE_ACTIONS = [
 
 def success_chance(stat_value: int) -> int:
     return min(90, 20 + stat_value * 4)
+
+
+# Школы стихий: стартовый бонус характеристики + уникальная способность для мини-игры.
+SCHOOLS = [
+    {
+        "id": "fire", "name": "Школа Огня", "icon": "🔥", "color": (224, 96, 58),
+        "stat_bonus": {"concentration": 3},
+        "ability": {
+            "name": "Огненный шар", "desc": "Мощный удар пламенем, урон выше обычного",
+            "cost": 35, "effect": "burst_damage", "power_mult": 2.2,
+        },
+    },
+    {
+        "id": "water", "name": "Школа Воды", "icon": "💧", "color": (72, 146, 214),
+        "stat_bonus": {"luck": 3},
+        "ability": {
+            "name": "Целебный поток", "desc": "Восстанавливает значительную часть HP",
+            "cost": 30, "effect": "heal", "heal_amount": 26,
+        },
+    },
+    {
+        "id": "earth", "name": "Школа Земли", "icon": "🪨", "color": (150, 118, 78),
+        "stat_bonus": {"athletics": 3},
+        "ability": {
+            "name": "Каменная броня", "desc": "Мощный блок, отражающий часть урона обратно",
+            "cost": 25, "effect": "fortify", "reflect": 7,
+        },
+    },
+    {
+        "id": "air", "name": "Школа Воздуха", "icon": "🌪️", "color": (176, 214, 224),
+        "stat_bonus": {"guile": 3},
+        "ability": {
+            "name": "Порыв ветра", "desc": "Резкий удар, пробивающий защиту соперника",
+            "cost": 20, "effect": "pierce_strike", "power_mult": 1.3,
+        },
+    },
+]
