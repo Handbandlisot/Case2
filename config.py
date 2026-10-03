@@ -51,6 +51,8 @@ COLOR_BUTTON_TEXT_DISABLED: tuple[int, int, int] = (95, 101, 116)
 COLOR_BUTTON_PRIMARY_BG: tuple[int, int, int] = (240, 180, 70)
 COLOR_BUTTON_PRIMARY_TEXT: tuple[int, int, int] = (25, 20, 10)
 COLOR_BUTTON_ABILITY_BG: tuple[int, int, int] = (200, 70, 60)
+COLOR_BUTTON_PRIMARY_HOVER: tuple[int, int, int] = (248, 202, 110)
+COLOR_BUTTON_ABILITY_HOVER: tuple[int, int, int] = (225, 105, 95)
 
 SCHOOL_COLORS: dict[str, tuple[int, int, int]] = {
     "fire": (224, 92, 45),
@@ -75,6 +77,18 @@ SCHOOL_ABILITY_NAME: dict[str, str] = {
     "water": "Целебный поток",
     "earth": "Каменная броня",
     "air": "Порыв ветра",
+}
+SCHOOL_ABILITY_DESCRIPTION: dict[str, str] = {
+    "fire": "Наносит противнику усиленный урон",
+    "water": "Лечит чемпиона, возвращая часть потерянного здоровья",
+    "earth": "Защищает от следующей атаки и отражает часть урона",
+    "air": "Наносит урон здоровью противника сквозь обычный блок и снимает его",
+}
+SCHOOL_ABILITY_BATTLE_HINT: dict[str, str] = {
+    "fire": "Наносит противнику усиленный урон",
+    "water": "Возвращает часть потерянного здоровья",
+    "earth": "Защищает от следующей атаки и отражает часть урона",
+    "air": "Наносит урон здоровью сквозь обычный блок и снимает его",
 }
 SCHOOL_BONUS_DESCRIPTION: dict[str, str] = {
     "fire": "+2 к силе",
@@ -149,7 +163,7 @@ ROSTER_ROW_GAP: int = 10
 
 # The journal/"Хроника турнира" panel always shows LOG_MAX_MESSAGES lines, so
 # its height is computed from these instead of a guessed constant.
-LOG_PANEL_HEADER_OFFSET: int = 36
+LOG_PANEL_HEADER_OFFSET: int = 44
 LOG_LINE_HEIGHT: int = 20
 LOG_PANEL_BOTTOM_PADDING: int = 10
 

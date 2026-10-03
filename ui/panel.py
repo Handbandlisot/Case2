@@ -95,10 +95,15 @@ def draw_wrapped_text(
     return y
 
 
-def draw_panel(surface: pygame.Surface, rect: pygame.Rect, active: bool = False) -> None:
+def draw_panel(surface: pygame.Surface, rect: pygame.Rect, active: bool = False, border_color: tuple[int, int, int] | None = None) -> None:
     """Draw a rounded panel background with a border."""
     pygame.draw.rect(surface, COLOR_PANEL_BG, rect, border_radius=PANEL_RADIUS)
-    border_color = COLOR_PANEL_BORDER_ACTIVE if active else COLOR_PANEL_BORDER
+    if border_color is None:
+        border_color = (
+            COLOR_PANEL_BORDER_ACTIVE
+            if active
+            else COLOR_PANEL_BORDER
+        )
     pygame.draw.rect(surface, border_color, rect, width=2, border_radius=PANEL_RADIUS)
 
 
