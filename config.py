@@ -1,3 +1,11 @@
+"""Global configuration and constants for "Турнир Четырёх Стихий".
+
+Every magic number used by the game lives in this module. Nothing outside
+this file should hard-code colors, sizes, stat bounds or balance numbers.
+"""
+
+from __future__ import annotations
+
 # --------------------------------------------------------------------------- #
 # Window / engine
 # --------------------------------------------------------------------------- #
@@ -132,3 +140,22 @@ PADDING: int = 24
 BUTTON_HEIGHT: int = 48
 BUTTON_SPACING: int = 16
 PANEL_RADIUS: int = 10
+SECTION_GAP: int = 14  # vertical gap between stacked panels on prep/fight screens
+
+# Preparation-screen roster (the 4 player cards above the log/action panels).
+ROSTER_TOP: int = 104
+ROSTER_CARD_HEIGHT: int = 100
+ROSTER_ROW_GAP: int = 10
+
+# The journal/"Хроника турнира" panel always shows LOG_MAX_MESSAGES lines, so
+# its height is computed from these instead of a guessed constant.
+LOG_PANEL_HEADER_OFFSET: int = 36
+LOG_LINE_HEIGHT: int = 20
+LOG_PANEL_BOTTOM_PADDING: int = 10
+
+# Preparation action grid (up to 5 action buttons, wrapped onto rows of 3).
+ACTION_GRID_COLUMNS: int = 3
+ACTION_PANEL_HEADER_OFFSET: int = 44
+ACTION_ROW_HEIGHT: int = BUTTON_HEIGHT + 28  # button + its description line below it
+ACTION_DESCRIPTION_HEIGHT: int = 18
+ACTION_PANEL_BOTTOM_PADDING: int = 12

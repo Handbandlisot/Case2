@@ -7,13 +7,18 @@ in ``logic.game_state`` and to the drawing helpers in ``ui``. It contains no
 tournament rules itself.
 """
 
-# from __future__ import annotations
+from __future__ import annotations
 
 import sys
 
 import pygame
 
 from config import (
+    ACTION_DESCRIPTION_HEIGHT,
+    ACTION_GRID_COLUMNS,
+    ACTION_PANEL_BOTTOM_PADDING,
+    ACTION_PANEL_HEADER_OFFSET,
+    ACTION_ROW_HEIGHT,
     BUTTON_HEIGHT,
     BUTTON_SPACING,
     COLOR_ACCENT,
@@ -28,11 +33,14 @@ from config import (
     FONT_SIZE_TITLE,
     FPS,
     PADDING,
+    ROSTER_CARD_HEIGHT,
+    ROSTER_ROW_GAP,
+    ROSTER_TOP,
     SCHOOL_BONUS_DESCRIPTION,
     SCHOOL_COLORS,
-    SCHOOL_EMOJI,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
+    SECTION_GAP,
     WINDOW_TITLE,
 )
 from logic import combat
@@ -41,7 +49,15 @@ from logic.game_state import GameState, Stage
 from models.player import Player, School
 from ui.button import Button
 from ui.event_modal import draw_event_modal
-from ui.panel import draw_log_panel, draw_panel, draw_player_card, draw_school_icon, draw_text
+from ui.panel import (
+    draw_log_panel,
+    draw_panel,
+    draw_player_card,
+    draw_school_icon,
+    draw_text,
+    draw_wrapped_text,
+    log_panel_height,
+)
 
 FontMap = dict[str, pygame.font.Font]
 ClickTarget = tuple[Button, "callable"]
@@ -81,10 +97,7 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
     spacing = panel_rect.width // 4
     for index, school in enumerate(School):
         x = panel_rect.x + spacing * index + spacing // 2
-        draw_text(
-            screen, SCHOOL_EMOJI[school.value], fonts["title"],
-            SCHOOL_COLORS[school.value], (x, icons_y), center=True,
-        )
+        draw_school_icon(screen, SCHOOL_COLORS[school.value], (x, icons_y), 18)
 
     lines = [
         "Раз в сто лет четыре школы выбирают лучших учеников.",
@@ -121,11 +134,12 @@ def draw_school_select(screen: pygame.Surface, fonts: FontMap, state: GameState)
         fonts["subtitle"], COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, 114), center=True,
     )
 
-    card_w, card_h = 260, 150
+    card_w, card_h = 300, 190
     gap = 24
     grid_w = card_w * 2 + gap
     origin_x = SCREEN_WIDTH // 2 - grid_w // 2
-    origin_y = 170
+    origin_y = 160
+    text_width = card_w - 32 - 24  # leave room for the icon on the name line
 
     targets: list[ClickTarget] = []
     for index, school in enumerate(School):
@@ -134,18 +148,18 @@ def draw_school_select(screen: pygame.Surface, fonts: FontMap, state: GameState)
         available = school in state.available_schools
         draw_panel(screen, rect, active=available)
 
-        draw_text(
-            screen, f"{SCHOOL_EMOJI[school.value]} {school.display_name}", fonts["body"],
-            SCHOOL_COLORS[school.value] if available else COLOR_TEXT_SECONDARY,
-            (rect.x + 16, rect.y + 16),
-        )
-        draw_text(
+        name_color = SCHOOL_COLORS[school.value] if available else COLOR_TEXT_SECONDARY
+        icon_center = (rect.x + 28, rect.y + 28)
+        draw_school_icon(screen, name_color, icon_center, 10)
+        draw_text(screen, school.display_name, fonts["body"], name_color, (rect.x + 44, rect.y + 16))
+
+        bonus_y = draw_wrapped_text(
             screen, f"Бонус: {SCHOOL_BONUS_DESCRIPTION[school.value]}", fonts["small"],
-            COLOR_TEXT_SECONDARY, (rect.x + 16, rect.y + 52),
+            COLOR_TEXT_SECONDARY, (rect.x + 16, rect.y + 56), text_width,
         )
-        draw_text(
+        draw_wrapped_text(
             screen, f"Способность: {school.ability_name}", fonts["small"],
-            COLOR_TEXT_SECONDARY, (rect.x + 16, rect.y + 74),
+            COLOR_TEXT_SECONDARY, (rect.x + 16, bonus_y + 6), text_width,
         )
 
         button = Button(
@@ -176,18 +190,18 @@ def _draw_prep_roster(screen: pygame.Surface, fonts: FontMap, state: GameState) 
     )
 
     card_w = (SCREEN_WIDTH - PADDING * 3) // 2
-    card_h = 110
-    top = 116
+    card_h = ROSTER_CARD_HEIGHT
+    top = ROSTER_TOP
     for index, player in enumerate(state.players):
         assert player is not None
         col, row = index % 2, index // 2
         rect = pygame.Rect(
-            PADDING + col * (card_w + PADDING), top + row * (card_h + 16), card_w, card_h
+            PADDING + col * (card_w + PADDING), top + row * (card_h + ROSTER_ROW_GAP), card_w, card_h
         )
         draw_player_card(screen, fonts, rect, player, active=(player is current))
 
-    log_top = top + 2 * (card_h + 16) + 8
-    return pygame.Rect(PADDING, log_top, SCREEN_WIDTH - 2 * PADDING, 150)
+    log_top = top + 2 * (card_h + ROSTER_ROW_GAP) + SECTION_GAP
+    return pygame.Rect(PADDING, log_top, SCREEN_WIDTH - 2 * PADDING, log_panel_height())
 
 
 def draw_prep_handoff(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list[ClickTarget]:
@@ -221,7 +235,6 @@ def draw_prep_event(screen: pygame.Surface, fonts: FontMap, state: GameState) ->
 
     assert state.current_event is not None
     button = Button(pygame.Rect(0, 0, 220, BUTTON_HEIGHT), "Далее: действия", variant="primary")
-    button.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40)
     draw_event_modal(
         screen, fonts, state.current_event, state.current_event_positive,
         state.current_event_message, button,
@@ -229,10 +242,24 @@ def draw_prep_event(screen: pygame.Surface, fonts: FontMap, state: GameState) ->
     return [(button, state.continue_from_event)]
 
 
+def _action_panel_height(action_count: int) -> int:
+    """Panel height needed to fit every action button in its grid, with no clipping."""
+    rows = -(-action_count // ACTION_GRID_COLUMNS)  # ceil division
+    return (
+        ACTION_PANEL_HEADER_OFFSET
+        + (rows - 1) * ACTION_ROW_HEIGHT
+        + BUTTON_HEIGHT
+        + ACTION_DESCRIPTION_HEIGHT
+        + ACTION_PANEL_BOTTOM_PADDING
+    )
+
+
 def draw_prep_action(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list[ClickTarget]:
     log_rect = _draw_prep_roster(screen, fonts, state)
 
-    action_panel = pygame.Rect(log_rect.x, log_rect.bottom + 16, log_rect.width, 190)
+    action_count = len(state.available_prep_actions())
+    panel_height = _action_panel_height(action_count)
+    action_panel = pygame.Rect(log_rect.x, log_rect.bottom + SECTION_GAP, log_rect.width, panel_height)
     draw_panel(screen, action_panel)
 
     targets: list[ClickTarget] = []
@@ -263,11 +290,11 @@ def draw_prep_action(screen: pygame.Surface, fonts: FontMap, state: GameState) -
         (action_panel.x + 16, action_panel.y + 14),
     )
     x = action_panel.x + 16
-    y = action_panel.y + 50
-    col_w = (action_panel.width - 32 - 2 * 12) // 3
+    y = action_panel.y + ACTION_PANEL_HEADER_OFFSET
+    col_w = (action_panel.width - 32 - (ACTION_GRID_COLUMNS - 1) * 12) // ACTION_GRID_COLUMNS
     for index, (action, available) in enumerate(state.available_prep_actions()):
-        col, row = index % 3, index // 3
-        rect = pygame.Rect(x + col * (col_w + 12), y + row * (BUTTON_HEIGHT + 34), col_w, BUTTON_HEIGHT)
+        col, row = index % ACTION_GRID_COLUMNS, index // ACTION_GRID_COLUMNS
+        rect = pygame.Rect(x + col * (col_w + 12), y + row * ACTION_ROW_HEIGHT, col_w, BUTTON_HEIGHT)
         button = Button(rect, action.name, enabled=available)
         button.draw(screen, fonts["button"])
         draw_text(
@@ -349,10 +376,7 @@ def draw_result_screen(
     panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30)
     draw_panel(screen, panel_rect, active=True)
 
-    draw_text(
-        screen, SCHOOL_EMOJI[winner.school.value], fonts["title"], SCHOOL_COLORS[winner.school.value],
-        (panel_rect.centerx, panel_rect.y + 40), center=True,
-    )
+    draw_school_icon(screen, SCHOOL_COLORS[winner.school.value], (panel_rect.centerx, panel_rect.y + 40), 22)
     draw_text(screen, winner.name, fonts["heading"], COLOR_TEXT_PRIMARY, (panel_rect.centerx, panel_rect.y + 76), center=True)
     draw_text(
         screen, winner.school.display_name, fonts["body"], SCHOOL_COLORS[winner.school.value],
@@ -362,7 +386,7 @@ def draw_result_screen(
     draw_text(screen, stats_line, fonts["small"], COLOR_TEXT_SECONDARY, (panel_rect.centerx, panel_rect.y + 132), center=True)
 
     if trophy:
-        draw_text(screen, "🏆 Чемпион Стихий!", fonts["heading"], COLOR_ACCENT, (panel_rect.centerx, panel_rect.y + 166), center=True)
+        draw_text(screen, "Чемпион Стихий!", fonts["heading"], COLOR_ACCENT, (panel_rect.centerx, panel_rect.y + 166), center=True)
 
     button = Button(pygame.Rect(0, 0, 240, BUTTON_HEIGHT), button_label, variant="primary")
     button.rect.center = (SCREEN_WIDTH // 2, panel_rect.bottom + 60)

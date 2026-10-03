@@ -13,6 +13,10 @@ from config import (
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
+    LOG_LINE_HEIGHT,
+    LOG_PANEL_BOTTOM_PADDING,
+    LOG_PANEL_HEADER_OFFSET,
+    LOG_MAX_MESSAGES,
     PANEL_RADIUS,
     SCHOOL_COLORS,
 )
@@ -45,6 +49,50 @@ def draw_school_icon(
     """
     pygame.draw.circle(surface, color, center, radius)
     pygame.draw.circle(surface, COLOR_TEXT_PRIMARY, center, radius, width=2)
+
+
+def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
+    """Split ``text`` into lines that each fit within ``max_width`` pixels."""
+    words = text.split(" ")
+    lines: list[str] = []
+    line = ""
+    for word in words:
+        candidate = f"{line} {word}".strip()
+        if font.size(candidate)[0] > max_width and line:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    return lines
+
+
+def wrapped_text_height(
+    text: str, font: pygame.font.Font, max_width: int, line_spacing: int = 4
+) -> int:
+    """Return the total pixel height ``text`` will take when wrapped."""
+    lines = wrap_text(text, font, max_width)
+    line_height = font.get_height()
+    return len(lines) * line_height + max(0, len(lines) - 1) * line_spacing
+
+
+def draw_wrapped_text(
+    surface: pygame.Surface,
+    text: str,
+    font: pygame.font.Font,
+    color: tuple[int, int, int],
+    top_left: tuple[int, int],
+    max_width: int,
+    line_spacing: int = 4,
+) -> int:
+    """Draw ``text`` word-wrapped to ``max_width``; return the bottom y."""
+    x, y = top_left
+    line_height = font.get_height()
+    for line in wrap_text(text, font, max_width):
+        draw_text(surface, line, font, color, (x, y))
+        y += line_height + line_spacing
+    return y
 
 
 def draw_panel(surface: pygame.Surface, rect: pygame.Rect, active: bool = False) -> None:
@@ -113,7 +161,7 @@ def draw_player_card(
     if player.sabotaged:
         draw_text(
             surface,
-            "⚠ Саботаж",
+            "Саботаж",
             fonts["small"],
             COLOR_TEXT_MUTED,
             (rect.right - 16, rect.y + 14),
@@ -145,6 +193,11 @@ def draw_player_card(
         )
 
 
+def log_panel_height() -> int:
+    """Height needed to show up to LOG_MAX_MESSAGES lines with no clipping."""
+    return LOG_PANEL_HEADER_OFFSET + LOG_MAX_MESSAGES * LOG_LINE_HEIGHT + LOG_PANEL_BOTTOM_PADDING
+
+
 def draw_log_panel(
     surface: pygame.Surface,
     fonts: dict[str, pygame.font.Font],
@@ -155,7 +208,7 @@ def draw_log_panel(
     """Draw the scrolling-less last-N-messages log panel."""
     draw_panel(surface, rect)
     draw_text(surface, title, fonts["body"], COLOR_TEXT_PRIMARY, (rect.x + 16, rect.y + 12))
-    y = rect.y + 44
+    y = rect.y + LOG_PANEL_HEADER_OFFSET
     for message in messages:
         draw_text(surface, f"• {message}", fonts["small"], COLOR_TEXT_SECONDARY, (rect.x + 16, y))
-        y += 22
+        y += LOG_LINE_HEIGHT
