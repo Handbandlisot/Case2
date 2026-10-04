@@ -15,6 +15,8 @@ from config import (
     COLOR_BUTTON_PRIMARY_TEXT,
     COLOR_BUTTON_TEXT,
     COLOR_BUTTON_TEXT_DISABLED,
+    COLOR_BUTTON_ABILITY_HOVER,
+    COLOR_BUTTON_PRIMARY_HOVER,
 )
 
 Variant = str  # "default" | "primary" | "ability"
@@ -23,6 +25,12 @@ _BG_COLORS: dict[Variant, tuple[int, int, int]] = {
     "default": COLOR_BUTTON_BG,
     "primary": COLOR_BUTTON_PRIMARY_BG,
     "ability": COLOR_BUTTON_ABILITY_BG,
+}
+
+_HOVER_COLORS: dict[Variant, tuple[int, int, int]] = {
+    "default": COLOR_BUTTON_HOVER,
+    "primary": COLOR_BUTTON_PRIMARY_HOVER,
+    "ability": COLOR_BUTTON_ABILITY_HOVER,
 }
 
 
@@ -56,7 +64,8 @@ class Button:
             text_color = COLOR_BUTTON_TEXT_DISABLED
         else:
             base = _BG_COLORS.get(self.variant, COLOR_BUTTON_BG)
-            bg_color = COLOR_BUTTON_HOVER if (hovered and self.variant == "default") else base
+            hover_color = _HOVER_COLORS.get(self.variant, COLOR_BUTTON_HOVER)
+            bg_color = hover_color if hovered else base
             text_color = (
                 COLOR_BUTTON_PRIMARY_TEXT if self.variant == "primary" else COLOR_BUTTON_TEXT
             )

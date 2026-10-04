@@ -19,6 +19,8 @@ from config import (
     LOG_MAX_MESSAGES,
     PANEL_RADIUS,
     SCHOOL_COLORS,
+    SCHOOL_ICON_PATHS,
+    SCHOOL_ICON_SIZE,
 )
 from models.player import Player
 
@@ -38,17 +40,36 @@ def draw_text(
     return rect
 
 
+_SCHOOL_ICON_CACHE: dict[tuple[str, int], pygame.Surface] = {}
 def draw_school_icon(
-    surface: pygame.Surface, color: tuple[int, int, int], center: tuple[int, int], radius: int
+    surface: pygame.Surface,
+    school_key: str,
+    center: tuple[int, int],
+    size: int = SCHOOL_ICON_SIZE,
+    enabled: bool = True,
 ) -> None:
-    """Draw a simple colored disc standing in for a school's emblem.
+    """Draw a school icon loaded from the assets directory."""
+    cache_key = (school_key, size)
 
-    Emoji glyphs are not reliably available in every font pygame can find
-    across platforms, so schools are identified by their accent color plus
-    their written name instead of a pictograph.
-    """
-    pygame.draw.circle(surface, color, center, radius)
-    pygame.draw.circle(surface, COLOR_TEXT_PRIMARY, center, radius, width=2)
+    if cache_key not in _SCHOOL_ICON_CACHE:
+        image = pygame.image.load(
+            str(SCHOOL_ICON_PATHS[school_key])
+        ).convert_alpha()
+
+        _SCHOOL_ICON_CACHE[cache_key] = pygame.transform.smoothscale(
+            image,
+            (size, size),
+        )
+
+    icon = _SCHOOL_ICON_CACHE[cache_key]
+
+    if not enabled:
+        icon = icon.copy()
+        icon.set_alpha(90)
+
+    icon_rect = icon.get_rect(center=center)
+    surface.blit(icon, icon_rect)
+
 
 
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
@@ -95,10 +116,15 @@ def draw_wrapped_text(
     return y
 
 
-def draw_panel(surface: pygame.Surface, rect: pygame.Rect, active: bool = False) -> None:
+def draw_panel(surface: pygame.Surface, rect: pygame.Rect, active: bool = False, border_color: tuple[int, int, int] | None = None) -> None:
     """Draw a rounded panel background with a border."""
     pygame.draw.rect(surface, COLOR_PANEL_BG, rect, border_radius=PANEL_RADIUS)
-    border_color = COLOR_PANEL_BORDER_ACTIVE if active else COLOR_PANEL_BORDER
+    if border_color is None:
+        border_color = (
+            COLOR_PANEL_BORDER_ACTIVE
+            if active
+            else COLOR_PANEL_BORDER
+        )
     pygame.draw.rect(surface, border_color, rect, width=2, border_radius=PANEL_RADIUS)
 
 
@@ -155,8 +181,15 @@ def draw_player_card(
     draw_panel(surface, rect, active=active)
     accent = SCHOOL_COLORS[player.school.value]
 
+    draw_school_icon(
+        surface,
+        player.school.value,
+        (rect.x + 28, rect.y + 23),
+        24,
+    )
+
     name_line = f"{player.name} · {player.school.display_name}"
-    draw_text(surface, name_line, fonts["body"], accent, (rect.x + 16, rect.y + 12))
+    draw_text(surface, name_line, fonts["body"], accent, (rect.x + 48, rect.y + 12))
 
     if player.sabotaged:
         draw_text(

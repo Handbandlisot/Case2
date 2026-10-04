@@ -23,6 +23,7 @@ from config import (
     BUTTON_SPACING,
     COLOR_ACCENT,
     COLOR_BACKGROUND,
+    COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
     FONT_SIZE_BODY,
@@ -36,6 +37,8 @@ from config import (
     ROSTER_CARD_HEIGHT,
     ROSTER_ROW_GAP,
     ROSTER_TOP,
+    SCHOOL_ABILITY_BATTLE_HINT,
+    SCHOOL_ABILITY_DESCRIPTION,
     SCHOOL_BONUS_DESCRIPTION,
     SCHOOL_COLORS,
     SCREEN_HEIGHT,
@@ -86,11 +89,11 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
         (SCREEN_WIDTH // 2, 90), center=True,
     )
     draw_text(
-        screen, "Четыре чемпиона · три боя · один победитель", fonts["subtitle"],
-        COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, 128), center=True,
+        screen, "Четыре чемпиона, три боя, ОДИН победитель", fonts["subtitle"],
+        COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, 145), center=True,
     )
 
-    panel_rect = pygame.Rect(0, 0, 560, 220)
+    panel_rect = pygame.Rect(0, 0, 680, 220)
     panel_rect.center = (SCREEN_WIDTH // 2, 300)
     draw_panel(screen, panel_rect)
 
@@ -102,6 +105,8 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
         emoji_font = pygame.font.SysFont("segoeuiemoji", 24)
         draw_text(
             screen, SCHOOL_EMOJI[school.value], emoji_font, COLOR_TEXT_PRIMARY, (x, icons_y))
+        x = panel_rect.x + spacing * index + spacing // 2
+        draw_school_icon(screen, school.value, (x, icons_y), 32)
 
     lines = [
         "Раз в сто лет четыре школы выбирают лучших учеников.",
@@ -131,7 +136,7 @@ def draw_school_select(screen: pygame.Surface, fonts: FontMap, state: GameState)
     position = state.current_picker_position
     draw_text(
         screen, f"Игрок {position + 1}, выберите школу", fonts["title"], COLOR_TEXT_PRIMARY,
-        (SCREEN_WIDTH // 2, 80), center=True,
+        (SCREEN_WIDTH // 2, 72), center=True,
     )
     draw_text(
         screen,
@@ -139,7 +144,7 @@ def draw_school_select(screen: pygame.Surface, fonts: FontMap, state: GameState)
         fonts["subtitle"], COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, 114), center=True,
     )
 
-    card_w, card_h = 300, 190
+    card_w, card_h = 300, 240
     gap = 24
     grid_w = card_w * 2 + gap
     origin_x = SCREEN_WIDTH // 2 - grid_w // 2
@@ -151,20 +156,30 @@ def draw_school_select(screen: pygame.Surface, fonts: FontMap, state: GameState)
         col, row = index % 2, index // 2
         rect = pygame.Rect(origin_x + col * (card_w + gap), origin_y + row * (card_h + gap), card_w, card_h)
         available = school in state.available_schools
-        draw_panel(screen, rect, active=available)
+        school_border_color = (SCHOOL_COLORS[school.value] if available else None)
+
+        draw_panel(screen, rect, border_color=school_border_color)
 
         name_color = SCHOOL_COLORS[school.value] if available else COLOR_TEXT_SECONDARY
         icon_center = (rect.x + 28, rect.y + 28)
-        draw_school_icon(screen, name_color, icon_center, 10)
+        draw_school_icon(screen, school.value, icon_center, 24, enabled=available)
         draw_text(screen, school.display_name, fonts["body"], name_color, (rect.x + 44, rect.y + 16))
 
         bonus_y = draw_wrapped_text(
             screen, f"Бонус: {SCHOOL_BONUS_DESCRIPTION[school.value]}", fonts["small"],
             COLOR_TEXT_SECONDARY, (rect.x + 16, rect.y + 56), text_width,
         )
-        draw_wrapped_text(
+        ability_bottom = draw_wrapped_text(
             screen, f"Способность: {school.ability_name}", fonts["small"],
             COLOR_TEXT_SECONDARY, (rect.x + 16, bonus_y + 6), text_width,
+        )
+        draw_wrapped_text(
+            screen,
+            SCHOOL_ABILITY_DESCRIPTION[school.value],
+            fonts["small"],
+            COLOR_TEXT_MUTED,
+            (rect.x + 16, ability_bottom + 4),
+            text_width,
         )
 
         button = Button(
@@ -186,7 +201,7 @@ def _draw_prep_roster(screen: pygame.Surface, fonts: FontMap, state: GameState) 
     """Draw the header + all four player cards; return the log panel rect."""
     draw_text(
         screen, f"Подготовка · раунд {state.prep_round} из 3", fonts["title"], COLOR_TEXT_PRIMARY,
-        (SCREEN_WIDTH // 2, 50), center=True,
+        (SCREEN_WIDTH // 2, 42), center=True,
     )
     current = state.current_player
     draw_text(
@@ -317,22 +332,41 @@ def draw_prep_action(screen: pygame.Surface, fonts: FontMap, state: GameState) -
 # Stage: fights
 # --------------------------------------------------------------------------- #
 def draw_fight(screen: pygame.Surface, fonts: FontMap, state: GameState, title: str) -> list[ClickTarget]:
-    draw_text(screen, title, fonts["title"], COLOR_TEXT_PRIMARY, (SCREEN_WIDTH // 2, 46), center=True)
+    title_y = 70
+    turn_y = 112
+    cards_top = 145
+
+    draw_text(
+        screen,
+        title,
+        fonts["title"],
+        COLOR_TEXT_PRIMARY,
+        (SCREEN_WIDTH // 2, title_y),
+        center=True,
+    )
     attacker = state.fight_attacker
     draw_text(
         screen, f"Ход · действует {attacker.name} ({attacker.school.display_name})",
-        fonts["subtitle"], COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, 78), center=True,
+        fonts["subtitle"], COLOR_TEXT_SECONDARY,
+        (SCREEN_WIDTH // 2, turn_y), center=True,
     )
 
     card_w = (SCREEN_WIDTH - PADDING * 3) // 2
     card_h = 150
     left, right = state.fight_participants
     assert left is not None and right is not None
-    left_rect = pygame.Rect(PADDING, 106, card_w, card_h)
-    right_rect = pygame.Rect(PADDING * 2 + card_w, 106, card_w, card_h)
+    left_rect = pygame.Rect(PADDING, cards_top, card_w, card_h)
+    right_rect = pygame.Rect(PADDING * 2 + card_w, cards_top, card_w, card_h)
     draw_player_card(screen, fonts, left_rect, left, active=(left is attacker), show_ability_status=True)
     draw_player_card(screen, fonts, right_rect, right, active=(right is attacker), show_ability_status=True)
-    draw_text(screen, "VS", fonts["heading"], COLOR_ACCENT, (SCREEN_WIDTH // 2, 106 + card_h // 2), center=True)
+    draw_text(
+        screen,
+        "VS",
+        fonts["body"],
+        COLOR_ACCENT,
+        (SCREEN_WIDTH // 2, cards_top + card_h // 2),
+        center=True,
+    )
 
     log_rect = pygame.Rect(PADDING, left_rect.bottom + 16, SCREEN_WIDTH - 2 * PADDING, 170)
     draw_log_panel(screen, fonts, log_rect, list(state.log))
@@ -352,9 +386,18 @@ def draw_fight(screen: pygame.Surface, fonts: FontMap, state: GameState, title: 
     ability_rect = pygame.Rect(PADDING + 2 * (button_w + BUTTON_SPACING), y, button_w, BUTTON_HEIGHT)
     ability_enabled = combat.is_ability_available(attacker)
     preview = combat.ability_damage_preview(attacker)
-    label = attacker.school.ability_name + (f" · {preview}" if preview else "")
+    value = f"+{preview}" if attacker.school is School.WATER else str(preview)
+    label = attacker.school.ability_name + (f" · {value}" if preview else "")
     ability_button = Button(ability_rect, label, enabled=ability_enabled, variant="ability")
     ability_button.draw(screen, fonts["button"])
+    draw_text(
+        screen,
+        SCHOOL_ABILITY_BATTLE_HINT[attacker.school.value],
+        fonts["small"],
+        COLOR_TEXT_SECONDARY,
+        (ability_rect.centerx, ability_rect.bottom + 16),
+        center=True,
+    )
 
     return [
         (attack_button, lambda: state.perform_combat_action("attack")),
@@ -381,7 +424,7 @@ def draw_result_screen(
     panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30)
     draw_panel(screen, panel_rect, active=True)
 
-    draw_school_icon(screen, SCHOOL_COLORS[winner.school.value], (panel_rect.centerx, panel_rect.y + 40), 22)
+    draw_school_icon(screen, winner.school.value, (panel_rect.centerx, panel_rect.y + 40), 40)
     draw_text(screen, winner.name, fonts["heading"], COLOR_TEXT_PRIMARY, (panel_rect.centerx, panel_rect.y + 76), center=True)
     draw_text(
         screen, winner.school.display_name, fonts["body"], SCHOOL_COLORS[winner.school.value],
