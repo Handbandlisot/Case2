@@ -5,6 +5,7 @@ this file should hard-code colors, sizes, stat bounds or balance numbers.
 """
 
 from __future__ import annotations
+from pathlib import Path
 
 # --------------------------------------------------------------------------- #
 # Window / engine
@@ -14,6 +15,17 @@ SCREEN_HEIGHT: int = 720
 FPS: int = 60
 WINDOW_TITLE: str = "Турнир Четырёх Стихий"
 
+PROJECT_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = PROJECT_DIR / "assets"
+
+SCHOOL_ICON_PATHS = {
+    "fire": ASSETS_DIR / "fire.png",
+    "water": ASSETS_DIR / "water.png",
+    "earth": ASSETS_DIR / "earth.png",
+    "air": ASSETS_DIR / "air.png",
+}
+
+SCHOOL_ICON_SIZE = 32
 # --------------------------------------------------------------------------- #
 # Fonts
 # --------------------------------------------------------------------------- #

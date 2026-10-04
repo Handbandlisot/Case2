@@ -100,7 +100,7 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
     spacing = panel_rect.width // 4
     for index, school in enumerate(School):
         x = panel_rect.x + spacing * index + spacing // 2
-        draw_school_icon(screen, SCHOOL_COLORS[school.value], (x, icons_y), 18)
+        draw_school_icon(screen, school.value, (x, icons_y), 32)
 
     lines = [
         "Раз в сто лет четыре школы выбирают лучших учеников.",
@@ -155,7 +155,7 @@ def draw_school_select(screen: pygame.Surface, fonts: FontMap, state: GameState)
 
         name_color = SCHOOL_COLORS[school.value] if available else COLOR_TEXT_SECONDARY
         icon_center = (rect.x + 28, rect.y + 28)
-        draw_school_icon(screen, name_color, icon_center, 10)
+        draw_school_icon(screen, school.value, icon_center, 24, enabled=available)
         draw_text(screen, school.display_name, fonts["body"], name_color, (rect.x + 44, rect.y + 16))
 
         bonus_y = draw_wrapped_text(
@@ -355,7 +355,7 @@ def draw_fight(screen: pygame.Surface, fonts: FontMap, state: GameState, title: 
     draw_text(
         screen,
         "VS",
-        fonts["heading"],
+        fonts["body"],
         COLOR_ACCENT,
         (SCREEN_WIDTH // 2, cards_top + card_h // 2),
         center=True,
@@ -417,7 +417,7 @@ def draw_result_screen(
     panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30)
     draw_panel(screen, panel_rect, active=True)
 
-    draw_school_icon(screen, SCHOOL_COLORS[winner.school.value], (panel_rect.centerx, panel_rect.y + 40), 22)
+    draw_school_icon(screen, winner.school.value, (panel_rect.centerx, panel_rect.y + 40), 40)
     draw_text(screen, winner.name, fonts["heading"], COLOR_TEXT_PRIMARY, (panel_rect.centerx, panel_rect.y + 76), center=True)
     draw_text(
         screen, winner.school.display_name, fonts["body"], SCHOOL_COLORS[winner.school.value],
