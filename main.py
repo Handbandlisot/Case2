@@ -42,6 +42,7 @@ from config import (
     SCREEN_WIDTH,
     SECTION_GAP,
     WINDOW_TITLE,
+    SCHOOL_EMOJI
 )
 from logic import combat
 from logic.actions_pool import can_be_sabotaged
@@ -93,18 +94,22 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
     panel_rect.center = (SCREEN_WIDTH // 2, 300)
     draw_panel(screen, panel_rect)
 
+    emoji_size = 24
     icons_y = panel_rect.y + 36
-    spacing = panel_rect.width // 4
+    spacing = (panel_rect.width - emoji_size * 4) // 5
     for index, school in enumerate(School):
-        x = panel_rect.x + spacing * index + spacing // 2
-        draw_school_icon(screen, SCHOOL_COLORS[school.value], (x, icons_y), 18)
+        x = panel_rect.x + spacing * (index + 1) + emoji_size * index
+        emoji_font = pygame.font.SysFont("segoeuiemoji", 24)
+        draw_text(
+            screen, SCHOOL_EMOJI[school.value], emoji_font, COLOR_TEXT_PRIMARY, (x, icons_y))
 
     lines = [
         "Раз в сто лет четыре школы выбирают лучших учеников.",
         "Развивайте чемпиона, переживите полуфинал и выиграйте финал.",
         "Игра для четырёх человек за одним компьютером.",
     ]
-    y = panel_rect.y + 84
+    # y = panel_rect.y + 84
+    y = icons_y + 18 + 30
     for line in lines:
         draw_text(screen, line, fonts["body"], COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, y), center=True)
         y += 28

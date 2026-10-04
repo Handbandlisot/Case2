@@ -70,6 +70,7 @@ class GameState:
     finalists: list[Player] = field(default_factory=list)
     champion: Optional[Player] = None
 
+
     def start_new_game(self) -> None:
         """Reset all state and move to the school-selection screen."""
         self.players = [None] * PLAYER_COUNT
@@ -87,11 +88,13 @@ class GameState:
         self.champion = None
         self.stage = Stage.SCHOOL_SELECT
 
+
     # -- school selection -----------------------------------------------------
     @property
     def current_picker_position(self) -> int:
         """Board position (0-3) of the player currently choosing a school."""
         return self.school_pick_order[self.school_pick_index]
+
 
     def choose_school(self, school: School) -> None:
         """Assign ``school`` to the current picker and advance the draft."""
@@ -102,16 +105,19 @@ class GameState:
         if self.school_pick_index >= PLAYER_COUNT:
             self._begin_preparation()
 
+
     # -- preparation ------------------------------------------------------
     def _begin_preparation(self) -> None:
         self.prep_round = 1
         self.prep_turn_index = 0
         self.stage = Stage.PREP_HANDOFF
 
+
     @property
     def current_prep_position(self) -> int:
         """Board position of the player whose preparation turn it is."""
         return PREP_TURN_ORDER[self.prep_round][self.prep_turn_index]
+
 
     @property
     def current_player(self) -> Player:
@@ -125,11 +131,13 @@ class GameState:
         assert fighter is not None
         return fighter
 
+
     @property
     def prep_opponents(self) -> list[Player]:
         """The three champions who are not currently taking a prep turn."""
         return [p for p in self.players if
                 p is not None and p is not self.current_player]
+
 
     def continue_from_handoff(self) -> None:
         """Player pressed "Продолжить": roll and apply the random event."""
@@ -141,10 +149,12 @@ class GameState:
         self.log.append(message)
         self.stage = Stage.PREP_EVENT
 
+
     def continue_from_event(self) -> None:
         """Player pressed "Далее: действия": open the action picker."""
         self.pending_action = None
         self.stage = Stage.PREP_ACTION
+
 
     def available_prep_actions(self) -> list[tuple[PrepAction, bool]]:
         """Return every prep action paired with whether it is enabled."""
@@ -153,6 +163,7 @@ class GameState:
             (action, action.is_available(self.current_player, opponents))
             for action in ACTIONS
         ]
+
 
     def select_prep_action(self, action: PrepAction) -> None:
         """Handle a click on an action button.
@@ -166,10 +177,12 @@ class GameState:
         message = action.apply(self.current_player, None)
         self._finish_prep_action(message)
 
+
     def valid_sabotage_targets(self) -> list[Player]:
         """Opponents that may legally be sabotaged right now."""
         actor = self.current_player
         return [p for p in self.prep_opponents if can_be_sabotaged(actor, p)]
+
 
     def select_sabotage_target(self, target: Player) -> None:
         """Resolve the pending sabotage action against ``target``."""
@@ -177,9 +190,11 @@ class GameState:
         message = self.pending_action.apply(self.current_player, target)
         self._finish_prep_action(message)
 
+
     def cancel_pending_action(self) -> None:
         """Back out of the sabotage target picker without spending the turn."""
         self.pending_action = None
+
 
     def _finish_prep_action(self, message: str) -> None:
         self.log.append(message)
@@ -193,6 +208,7 @@ class GameState:
             self._begin_semifinal_1()
         else:
             self.stage = Stage.PREP_HANDOFF
+
 
     # -- fights -------------------------------------------------------------
     def _start_fight(self, first: Player, second: Player) -> None:
@@ -213,11 +229,13 @@ class GameState:
             self.fight_current_index = random.choice([0, 1])
         self.fight_participants = (first, second)
 
+
     def _begin_semifinal_1(self) -> None:
         first, second = self.players[0], self.players[1]
         assert first is not None and second is not None
         self._start_fight(first, second)
         self.stage = Stage.SEMIFINAL_1
+
 
     def _begin_semifinal_2(self) -> None:
         first, second = self.players[2], self.players[3]
@@ -225,9 +243,11 @@ class GameState:
         self._start_fight(first, second)
         self.stage = Stage.SEMIFINAL_2
 
+
     def continue_after_semifinal_1(self) -> None:
         """Advance from the first semifinal's result screen to the second."""
         self._begin_semifinal_2()
+
 
     def continue_after_semifinal_2(self) -> None:
         """Advance from the second semifinal's result screen to the final."""
@@ -237,6 +257,7 @@ class GameState:
         self._start_fight(first, second)
         self.stage = Stage.FINAL
 
+
     @property
     def fight_attacker(self) -> Player:
         """The champion whose turn it currently is in the active fight."""
@@ -244,12 +265,14 @@ class GameState:
         assert fighter is not None
         return fighter
 
+
     @property
     def fight_defender(self) -> Player:
         """The champion on the receiving end of the current fight turn."""
         fighter = self.fight_participants[1 - self.fight_current_index]
         assert fighter is not None
         return fighter
+
 
     def perform_combat_action(self, kind: str,
                               target: Optional[Player] = None) -> None:
@@ -265,6 +288,7 @@ class GameState:
             raise ValueError(f"Unknown combat action: {kind}")
         self.log.append(message)
         self._check_fight_outcome(attacker, defender)
+
 
     def _check_fight_outcome(self, attacker: Player, defender: Player) -> None:
         if not attacker.is_alive:
