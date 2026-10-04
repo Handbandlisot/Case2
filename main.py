@@ -97,16 +97,12 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
     panel_rect.center = (SCREEN_WIDTH // 2, 300)
     draw_panel(screen, panel_rect)
 
-    emoji_size = 24
+    emoji_size = 32
     icons_y = panel_rect.y + 36
     spacing = (panel_rect.width - emoji_size * 4) // 5
     for index, school in enumerate(School):
         x = panel_rect.x + spacing * (index + 1) + emoji_size * index
-        emoji_font = pygame.font.SysFont("segoeuiemoji", 24)
-        draw_text(
-            screen, SCHOOL_EMOJI[school.value], emoji_font, COLOR_TEXT_PRIMARY, (x, icons_y))
-        x = panel_rect.x + spacing * index + spacing // 2
-        draw_school_icon(screen, school.value, (x, icons_y), 32)
+        draw_school_icon(screen, school.value, (x, icons_y), emoji_size)
 
     lines = [
         "Раз в сто лет четыре школы выбирают лучших учеников.",
