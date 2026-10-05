@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from config import (
@@ -41,6 +43,44 @@ def draw_text(
 
 
 _SCHOOL_ICON_CACHE: dict[tuple[str, int], pygame.Surface] = {}
+
+
+def _fallback_school_icon(school_key: str, size: int) -> pygame.Surface:
+    """Draw a small vector icon if the binary Twemoji asset is unavailable."""
+    image = pygame.Surface((size, size), pygame.SRCALPHA)
+    cx = size // 2
+    color = SCHOOL_COLORS[school_key]
+
+    if school_key == "fire":
+        pygame.draw.polygon(image, color, [
+            (cx, 2), (size - 4, size // 3), (size - 7, size - 5),
+            (cx, size - 1), (5, size - 7), (size // 4, size // 2),
+        ])
+        pygame.draw.polygon(image, (255, 190, 85), [
+            (cx, size // 2 - 2), (cx + size // 5, size - 5),
+            (cx, size - 8), (cx - size // 5, size - 5),
+        ])
+    elif school_key == "water":
+        pygame.draw.polygon(image, color, [
+            (cx, 2), (size - 4, size // 2), (size - 7, size - 8),
+            (cx, size - 2), (7, size - 8), (4, size // 2),
+        ])
+        pygame.draw.circle(image, (150, 215, 255), (cx - size // 7, size // 2), max(2, size // 10))
+    elif school_key == "earth":
+        pygame.draw.polygon(image, color, [
+            (size // 4, size // 4), (size * 3 // 5, 3),
+            (size - 3, size // 3), (size * 4 // 5, size - 4),
+            (size // 5, size - 5), (3, size // 2),
+        ])
+        pygame.draw.line(image, (190, 165, 125), (size // 4, size * 2 // 3), (size * 3 // 4, size // 3), max(1, size // 12))
+    elif school_key == "air":
+        for inset in (size // 6, size // 3, size // 2):
+            rect = pygame.Rect(inset, inset, size - inset * 2, size - inset * 2)
+            pygame.draw.arc(image, color, rect, math.pi * 0.15, math.pi * 1.75, max(1, size // 12))
+        pygame.draw.circle(image, color, (size - 5, size // 2), max(2, size // 10))
+    return image
+
+
 def draw_school_icon(
     surface: pygame.Surface,
     school_key: str,
@@ -52,9 +92,11 @@ def draw_school_icon(
     cache_key = (school_key, size)
 
     if cache_key not in _SCHOOL_ICON_CACHE:
-        image = pygame.image.load(
-            str(SCHOOL_ICON_PATHS[school_key])
-        ).convert_alpha()
+        icon_path = SCHOOL_ICON_PATHS[school_key]
+        if icon_path.is_file():
+            image = pygame.image.load(str(icon_path)).convert_alpha()
+        else:
+            image = _fallback_school_icon(school_key, size)
 
         _SCHOOL_ICON_CACHE[cache_key] = pygame.transform.smoothscale(
             image,

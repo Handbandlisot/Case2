@@ -52,6 +52,8 @@ COLOR_TEXT_MUTED: tuple[int, int, int] = (105, 112, 130)
 COLOR_ACCENT: tuple[int, int, int] = (240, 180, 70)
 COLOR_POSITIVE: tuple[int, int, int] = (70, 190, 120)
 COLOR_NEGATIVE: tuple[int, int, int] = (220, 90, 90)
+COLOR_DAMAGE_NUMBER: tuple[int, int, int] = (255, 177, 153)
+COLOR_HEAL_NUMBER: tuple[int, int, int] = (158, 255, 189)
 COLOR_HEALTH_BAR: tuple[int, int, int] = (70, 190, 120)
 COLOR_HEALTH_BAR_BG: tuple[int, int, int] = (45, 52, 68)
 
@@ -93,19 +95,19 @@ SCHOOL_ABILITY_NAME: dict[str, str] = {
 SCHOOL_ABILITY_DESCRIPTION: dict[str, str] = {
     "fire": "Наносит противнику усиленный урон",
     "water": "Лечит чемпиона, возвращая часть потерянного здоровья",
-    "earth": "Защищает от следующей атаки и отражает часть урона",
+    "earth": "Блокирует следующую атаку и отражает урон, равный интеллекту",
     "air": "Наносит урон здоровью противника сквозь обычный блок и снимает его",
 }
 SCHOOL_ABILITY_BATTLE_HINT: dict[str, str] = {
     "fire": "Наносит противнику усиленный урон",
     "water": "Возвращает часть потерянного здоровья",
-    "earth": "Защищает от следующей атаки и отражает часть урона",
+    "earth": "Блокирует следующую атаку и отражает урон, равный интеллекту",
     "air": "Наносит урон здоровью сквозь обычный блок и снимает его",
 }
 SCHOOL_BONUS_DESCRIPTION: dict[str, str] = {
     "fire": "+2 к силе",
-    "water": "+2 к интеллекту",
-    "earth": "+5 к текущему и максимальному здоровью",
+    "water": "+3 к интеллекту",
+    "earth": "+6 к текущему и максимальному здоровью",
     "air": "+2 к харизме",
 }
 
@@ -113,7 +115,6 @@ SCHOOL_BONUS_DESCRIPTION: dict[str, str] = {
 # Base stats (before school bonuses)
 # --------------------------------------------------------------------------- #
 BASE_HEALTH: int = 40
-EARTH_BASE_HEALTH: int = 45  # earth champion starts with 45/45 instead of 40
 BASE_STRENGTH: int = 5
 BASE_INTELLECT: int = 5
 BASE_CHARISMA: int = 5
@@ -124,9 +125,11 @@ MIN_HEALTH: int = 0
 PREP_MIN_HEALTH: int = 1  # health may not drop below this during preparation
 
 SCHOOL_STRENGTH_BONUS: int = 2
-SCHOOL_INTELLECT_BONUS: int = 2
+SCHOOL_INTELLECT_BONUS: int = 3
 SCHOOL_CHARISMA_BONUS: int = 2
-SCHOOL_HEALTH_BONUS: int = 5
+SCHOOL_HEALTH_BONUS: int = 6
+# Earth champion starts with BASE_HEALTH + bonus (46/46) instead of 40.
+EARTH_BASE_HEALTH: int = BASE_HEALTH + SCHOOL_HEALTH_BONUS
 
 # --------------------------------------------------------------------------- #
 # Preparation stage
@@ -157,7 +160,22 @@ HEAL_BASE_AMOUNT: int = 8
 HEAL_INTELLECT_MULTIPLIER: int = 2
 WIND_BASE_DAMAGE: int = 5
 WIND_INTELLECT_MULTIPLIER: int = 2
-ARMOR_REFLECT_DIVISOR: int = 2  # reflected damage = intellect // ARMOR_REFLECT_DIVISOR
+ARMOR_REFLECT_DIVISOR: int = 1  # reflected damage = intellect // ARMOR_REFLECT_DIVISOR
+
+# Combat-animation timing (seconds). The game rules still resolve in
+# ``logic.combat``; these values only control the presentation timeline.
+COMBAT_ANIM_WINDUP_TIME: float = 0.10
+COMBAT_ANIM_IMPACT_TIME: float = 0.44
+COMBAT_ANIM_BLOCK_IMPACT_TIME: float = 0.08
+COMBAT_ANIM_CAST_IMPACT_TIME: float = 0.32
+COMBAT_ANIM_BASE_DURATION: float = 0.96
+COMBAT_ANIM_BLOCK_DURATION: float = 0.72
+COMBAT_ANIM_CAST_DURATION: float = 0.98
+COMBAT_ANIM_KO_DURATION: float = 1.28
+COMBAT_ANIM_RETURN_TIME: float = 0.23
+COMBAT_ANIM_HIT_FLASH_DURATION: float = 0.34
+COMBAT_ANIM_POPUP_DURATION: float = 0.80
+COMBAT_ANIM_KO_FALL_DELAY: float = 0.18
 
 # --------------------------------------------------------------------------- #
 # Layout
@@ -173,11 +191,28 @@ ROSTER_TOP: int = 104
 ROSTER_CARD_HEIGHT: int = 100
 ROSTER_ROW_GAP: int = 10
 
-# The journal/"Хроника турнира" panel always shows LOG_MAX_MESSAGES lines, so
-# its height is computed from these instead of a guessed constant.
+# Shared journal metrics. Preparation shows LOG_MAX_MESSAGES; combat uses a
+# shorter three-message slice to make room for the animated arena.
 LOG_PANEL_HEADER_OFFSET: int = 44
 LOG_LINE_HEIGHT: int = 20
 LOG_PANEL_BOTTOM_PADDING: int = 10
+
+# Fight screen: a short journal leaves room for the animated arena and actions.
+FIGHT_TITLE_Y: int = 42
+FIGHT_TURN_Y: int = 82
+FIGHT_CARDS_TOP: int = 110
+FIGHT_CARD_HEIGHT: int = 138
+COMBAT_ARENA_HEIGHT: int = 150
+COMBAT_ARENA_GAP: int = 12
+COMBAT_LOG_MESSAGES: int = 3
+COMBAT_LOG_HEIGHT: int = (
+    LOG_PANEL_HEADER_OFFSET
+    + COMBAT_LOG_MESSAGES * LOG_LINE_HEIGHT
+    + LOG_PANEL_BOTTOM_PADDING
+)
+COMBAT_ARENA_FIGURE_OFFSET: int = 198
+COMBAT_LOG_GAP: int = 12
+FIGHT_BUTTON_GAP: int = 16
 
 # Preparation action grid (up to 5 action buttons, wrapped onto rows of 3).
 ACTION_GRID_COLUMNS: int = 3

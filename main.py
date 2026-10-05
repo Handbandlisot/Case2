@@ -21,6 +21,16 @@ from config import (
     ACTION_ROW_HEIGHT,
     BUTTON_HEIGHT,
     BUTTON_SPACING,
+    COMBAT_ARENA_GAP,
+    COMBAT_ARENA_HEIGHT,
+    COMBAT_LOG_GAP,
+    COMBAT_LOG_HEIGHT,
+    COMBAT_LOG_MESSAGES,
+    FIGHT_BUTTON_GAP,
+    FIGHT_CARD_HEIGHT,
+    FIGHT_CARDS_TOP,
+    FIGHT_TITLE_Y,
+    FIGHT_TURN_Y,
     COLOR_ACCENT,
     COLOR_BACKGROUND,
     COLOR_TEXT_MUTED,
@@ -62,6 +72,7 @@ from ui.panel import (
     draw_wrapped_text,
     log_panel_height,
 )
+from ui.combat_animation import CombatAnimation, draw_combat_arena
 
 FontMap = dict[str, pygame.font.Font]
 ClickTarget = tuple[Button, "callable"]
@@ -327,60 +338,90 @@ def draw_prep_action(screen: pygame.Surface, fonts: FontMap, state: GameState) -
 # --------------------------------------------------------------------------- #
 # Stage: fights
 # --------------------------------------------------------------------------- #
-def draw_fight(screen: pygame.Surface, fonts: FontMap, state: GameState, title: str) -> list[ClickTarget]:
-    title_y = 70
-    turn_y = 112
-    cards_top = 145
-
+def draw_fight(
+    screen: pygame.Surface,
+    fonts: FontMap,
+    state: GameState,
+    title: str,
+    animation: CombatAnimation,
+    ambient_time: float,
+) -> list[ClickTarget]:
+    """Draw the compact fight HUD and animated central arena."""
     draw_text(
         screen,
         title,
         fonts["title"],
         COLOR_TEXT_PRIMARY,
-        (SCREEN_WIDTH // 2, title_y),
+        (SCREEN_WIDTH // 2, FIGHT_TITLE_Y),
         center=True,
     )
-    attacker = state.fight_attacker
+
+    # Keep the acting champion fixed on screen until the animation has played
+    # through, even if the rules resolve and pass the turn at the impact frame.
+    attacker = animation.attacker if animation.active and animation.attacker else state.fight_attacker
     draw_text(
-        screen, f"Ход · действует {attacker.name} ({attacker.school.display_name})",
-        fonts["subtitle"], COLOR_TEXT_SECONDARY,
-        (SCREEN_WIDTH // 2, turn_y), center=True,
+        screen,
+        f"Ход · действует {attacker.name} ({attacker.school.display_name})",
+        fonts["subtitle"],
+        COLOR_TEXT_SECONDARY,
+        (SCREEN_WIDTH // 2, FIGHT_TURN_Y),
+        center=True,
     )
 
     card_w = (SCREEN_WIDTH - PADDING * 3) // 2
-    card_h = 150
     left, right = state.fight_participants
     assert left is not None and right is not None
-    left_rect = pygame.Rect(PADDING, cards_top, card_w, card_h)
-    right_rect = pygame.Rect(PADDING * 2 + card_w, cards_top, card_w, card_h)
-    draw_player_card(screen, fonts, left_rect, left, active=(left is attacker), show_ability_status=True)
-    draw_player_card(screen, fonts, right_rect, right, active=(right is attacker), show_ability_status=True)
-    draw_text(
-        screen,
-        "VS",
-        fonts["body"],
-        COLOR_ACCENT,
-        (SCREEN_WIDTH // 2, cards_top + card_h // 2),
-        center=True,
+    left_rect = pygame.Rect(PADDING, FIGHT_CARDS_TOP, card_w, FIGHT_CARD_HEIGHT)
+    right_rect = pygame.Rect(PADDING * 2 + card_w, FIGHT_CARDS_TOP, card_w, FIGHT_CARD_HEIGHT)
+    draw_player_card(
+        screen, fonts, left_rect, left,
+        active=(left is attacker), show_ability_status=True,
+    )
+    draw_player_card(
+        screen, fonts, right_rect, right,
+        active=(right is attacker), show_ability_status=True,
     )
 
-    log_rect = pygame.Rect(PADDING, left_rect.bottom + 16, SCREEN_WIDTH - 2 * PADDING, 170)
-    draw_log_panel(screen, fonts, log_rect, list(state.log))
+    arena_rect = pygame.Rect(
+        PADDING,
+        left_rect.bottom + COMBAT_ARENA_GAP,
+        SCREEN_WIDTH - 2 * PADDING,
+        COMBAT_ARENA_HEIGHT,
+    )
+    draw_combat_arena(screen, arena_rect, left, right, animation, fonts, ambient_time)
+
+    log_rect = pygame.Rect(
+        PADDING,
+        arena_rect.bottom + COMBAT_LOG_GAP,
+        SCREEN_WIDTH - 2 * PADDING,
+        COMBAT_LOG_HEIGHT,
+    )
+    draw_log_panel(
+        screen,
+        fonts,
+        log_rect,
+        list(state.log)[-COMBAT_LOG_MESSAGES:],
+    )
 
     button_w = (SCREEN_WIDTH - 2 * PADDING - 2 * BUTTON_SPACING) // 3
-    y = log_rect.bottom + 24
+    y = log_rect.bottom + FIGHT_BUTTON_GAP
+    can_interact = not animation.active
 
     attack_rect = pygame.Rect(PADDING, y, button_w, BUTTON_HEIGHT)
-    attack_button = Button(attack_rect, f"Атака · {combat.attack_damage_preview(attacker)}")
+    attack_button = Button(
+        attack_rect,
+        f"Атака · {combat.attack_damage_preview(attacker)}",
+        enabled=can_interact,
+    )
     attack_button.draw(screen, fonts["button"])
 
     block_rect = pygame.Rect(PADDING + button_w + BUTTON_SPACING, y, button_w, BUTTON_HEIGHT)
-    block_enabled = combat.is_block_available(attacker)
+    block_enabled = can_interact and combat.is_block_available(attacker)
     block_button = Button(block_rect, "Блок · 50%", enabled=block_enabled)
     block_button.draw(screen, fonts["button"])
 
     ability_rect = pygame.Rect(PADDING + 2 * (button_w + BUTTON_SPACING), y, button_w, BUTTON_HEIGHT)
-    ability_enabled = combat.is_ability_available(attacker)
+    ability_enabled = can_interact and combat.is_ability_available(attacker)
     preview = combat.ability_damage_preview(attacker)
     value = f"+{preview}" if attacker.school is School.WATER else str(preview)
     label = attacker.school.ability_name + (f" · {value}" if preview else "")
@@ -395,10 +436,24 @@ def draw_fight(screen: pygame.Surface, fonts: FontMap, state: GameState, title: 
         center=True,
     )
 
+    if not can_interact:
+        return []
+
+    def begin_action(kind: str) -> None:
+        actor = state.fight_attacker
+        target = state.fight_defender
+        animation.start(
+            kind,
+            actor,
+            target,
+            title,
+            lambda: state.perform_combat_action(kind),
+        )
+
     return [
-        (attack_button, lambda: state.perform_combat_action("attack")),
-        (block_button, lambda: state.perform_combat_action("block")),
-        (ability_button, lambda: state.perform_combat_action("ability")),
+        (attack_button, lambda: begin_action("attack")),
+        (block_button, lambda: begin_action("block")),
+        (ability_button, lambda: begin_action("ability")),
     ]
 
 
@@ -441,7 +496,13 @@ def draw_result_screen(
 # --------------------------------------------------------------------------- #
 # Dispatch
 # --------------------------------------------------------------------------- #
-def draw_stage(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list[ClickTarget]:
+def draw_stage(
+    screen: pygame.Surface,
+    fonts: FontMap,
+    state: GameState,
+    animation: CombatAnimation,
+    ambient_time: float,
+) -> list[ClickTarget]:
     if state.stage is Stage.INTRO:
         return draw_intro(screen, fonts, state)
     if state.stage is Stage.SCHOOL_SELECT:
@@ -453,11 +514,11 @@ def draw_stage(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
     if state.stage is Stage.PREP_ACTION:
         return draw_prep_action(screen, fonts, state)
     if state.stage is Stage.SEMIFINAL_1:
-        return draw_fight(screen, fonts, state, "Первый полуфинал")
+        return draw_fight(screen, fonts, state, "Первый полуфинал", animation, ambient_time)
     if state.stage is Stage.SEMIFINAL_2:
-        return draw_fight(screen, fonts, state, "Второй полуфинал")
+        return draw_fight(screen, fonts, state, "Второй полуфинал", animation, ambient_time)
     if state.stage is Stage.FINAL:
-        return draw_fight(screen, fonts, state, "Финал")
+        return draw_fight(screen, fonts, state, "Финал", animation, ambient_time)
     if state.stage is Stage.SEMIFINAL_1_RESULT:
         return draw_result_screen(
             screen, fonts, "Победитель полуфинала", state.finalists[0],
@@ -485,9 +546,13 @@ def main() -> None:
     clock = pygame.time.Clock()
     fonts = load_fonts()
     state = GameState()
+    animation = CombatAnimation()
+    ambient_time = 0.0
+    fight_stages = {Stage.SEMIFINAL_1, Stage.SEMIFINAL_2, Stage.FINAL}
 
     running = True
     while running:
+        dt = clock.tick(FPS) / 1000.0
         clicked = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -495,8 +560,23 @@ def main() -> None:
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 clicked = True
 
+        animation.update(dt)
+        ambient_time += dt
         screen.fill(COLOR_BACKGROUND)
-        targets = draw_stage(screen, fonts, state)
+
+        # If the impact just ended a fight, keep the arena visible until the
+        # knockout animation finishes; then the regular result screen appears.
+        if animation.active and state.stage not in fight_stages:
+            targets = draw_fight(
+                screen,
+                fonts,
+                state,
+                animation.title,
+                animation,
+                ambient_time,
+            )
+        else:
+            targets = draw_stage(screen, fonts, state, animation, ambient_time)
 
         if clicked:
             mouse_pos = pygame.mouse.get_pos()
@@ -506,7 +586,6 @@ def main() -> None:
                     break
 
         pygame.display.flip()
-        clock.tick(FPS)
 
     pygame.quit()
     sys.exit()

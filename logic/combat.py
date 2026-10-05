@@ -40,16 +40,28 @@ def ability_damage_preview(player: Player) -> int:
 
 
 def is_block_available(player: Player) -> bool:
-    """Block is disabled if the player blocked on their previous turn."""
-    return not player.blocked_last_turn
+    """Block is available unless it would be redundant or forbidden.
+
+    It is disabled if the player blocked on their previous turn, if a block
+    is already armed, or if Каменная броня is armed (they do not stack).
+    """
+    return not (
+        player.blocked_last_turn or player.block_active or player.armor_active
+    )
 
 
 def is_ability_available(player: Player) -> bool:
-    """An ability is usable once per fight; Water also requires missing HP."""
+    """An ability is usable once per fight.
+
+    Water also requires missing HP; Earth requires that no block or armor
+    is already armed (they do not stack).
+    """
     if player.ability_used:
         return False
     if player.school is School.WATER:
         return player.health < player.max_health
+    if player.school is School.EARTH:
+        return not (player.block_active or player.armor_active)
     return True
 
 
@@ -97,6 +109,8 @@ def perform_attack(attacker: Player, defender: Player) -> str:
 
 def perform_block(attacker: Player) -> str:
     """Arm a block for the attacker's next incoming hit."""
+    if not is_block_available(attacker):
+        raise ValueError("Block is not available right now")
     attacker.block_active = True
     attacker.blocked_last_turn = True
     return f"{attacker.log_tag} поставил(а) блок"
@@ -147,6 +161,8 @@ _ABILITY_HANDLERS = {
 
 def perform_ability(attacker: Player, defender: Player) -> str:
     """Resolve the attacker's school ability and return a log message."""
+    if not is_ability_available(attacker):
+        raise ValueError("Ability is not available right now")
     handler = _ABILITY_HANDLERS[attacker.school]
     message = handler(attacker, defender)
     attacker.ability_used = True
