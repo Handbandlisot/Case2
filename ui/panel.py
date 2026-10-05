@@ -234,13 +234,14 @@ def draw_player_card(
     draw_text(surface, name_line, fonts["body"], accent, (rect.x + 48, rect.y + 12))
 
     if player.sabotaged:
+        sabotage_label = "Саботаж"
+        label_width = fonts["small"].size(sabotage_label)[0]
         draw_text(
             surface,
-            "Саботаж",
+            sabotage_label,
             fonts["small"],
             COLOR_TEXT_MUTED,
-            (rect.right - 16, rect.y + 14),
-            center=False,
+            (rect.right - 16 - label_width, rect.y + 14),
         )
 
     bar_rect = pygame.Rect(rect.x + 16, rect.y + 42, rect.width - 32, 18)

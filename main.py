@@ -120,7 +120,6 @@ def draw_intro(screen: pygame.Surface, fonts: FontMap, state: GameState) -> list
         "Развивайте чемпиона, переживите полуфинал и выиграйте финал.",
         "Игра для четырёх человек за одним компьютером.",
     ]
-    # y = panel_rect.y + 84
     y = icons_y + 18 + 30
     for line in lines:
         draw_text(screen, line, fonts["body"], COLOR_TEXT_SECONDARY, (SCREEN_WIDTH // 2, y), center=True)
